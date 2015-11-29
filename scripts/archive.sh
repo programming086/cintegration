@@ -43,6 +43,11 @@ case "$1" in
    download_path="${PROFILE_HOME}"
    store_path="${PROJECT_NAME}-${PROFILE_NAME}"
    ;;
+'exten')
+   download_file="$2"
+   download_path="${PROFILE_HOME}"
+   store_path="${PROJECT_NAME}-$2"
+   ;;
 esac   
 
 
@@ -63,11 +68,11 @@ fi
 
 if [ "0$auth_ok" == "01" ]
 then
-   wget --no-check-certificate --http-user="${user}" --http-password="${pass}" -O "${download_path}/${store_path}" "${KEY_SERVER_PATH}/$download_file" 2>/dev/null
+   /usr/local/bin/wget --no-check-certificate --http-user="${user}" --http-password="${pass}" -O "${download_path}/${store_path}" "${KEY_SERVER_PATH}/$download_file" 2>/dev/null
    status_first=$?
 else
 
-   wget --no-check-certificate -O "${download_path}/${store_path}" "${KEY_SERVER_PATH}/${download_file}" 2>/dev/null
+   /usr/local/bin/wget --no-check-certificate -O "${download_path}/${store_path}" "${KEY_SERVER_PATH}/${download_file}" 2>/dev/null
    status_first=$?
 
    if [ $status_first -eq 6 ]
@@ -83,7 +88,7 @@ else
 		printf 'password: '
 		read pass 
 	
-		wget --no-check-certificate --http-user="${user}" --http-password="${pass}" -O "${download_path}/${store_path}" "${KEY_SERVER_PATH}/$download_file" 2>/dev/null
+		/usr/local/bin/wget --no-check-certificate --http-user="${user}" --http-password="${pass}" -O "${download_path}/${store_path}" "${KEY_SERVER_PATH}/$download_file" 2>/dev/null
 		status=$?
 		if [ $status -eq 0 ]
 		then
@@ -124,7 +129,6 @@ if [ ! -d "${PROFILE_HOME}" ]; then
    echo "[INFO] $HOME/Library/MobileDevice/Provisioning\ Profiles/ was created"
 fi
 
-
 #Searching profiles
 PROFILE_LOCATION="$PROFILE_HOME/${FULL_PROFILE_NAME}"
 if [ ! -f "${PROFILE_LOCATION}" ]; then
@@ -132,6 +136,16 @@ if [ ! -f "${PROFILE_LOCATION}" ]; then
    load_provision 'prov'
 fi
       
+
+#Searching provision for extension
+for extension in $PROFILE_EXTENSIONS
+do
+	PROFILE_EXTEN_LOCATION="$PROFILE_HOME/${PROJECT_NAME}-${extension}"   
+	if [ ! -f "${PROFILE_EXTEN_LOCATION}" ]; then
+   		echo "[WARNING] Cannot find extension profile for specified build type ($1) : ( ${PROFILE_EXTEN_LOCATION})"
+   		load_provision 'exten' "$extension"
+	fi
+done      
 
 profile_expiration=$(grep -A1 ExpirationDate -a "${PROFILE_HOME}/${FULL_PROFILE_NAME}" | tail -1 | sed -e 's/.*<date>\(.*\)<\/date>/\1/')
 if [ -z "$profile_expiration" ]
@@ -185,18 +199,23 @@ then
     echo "[INFO] Git was stashed"
 fi       
 done
+
 if [ -n "$PlistInfo" ]
 then
 	if [ "a${BUNDLE_VERSION_CHANGE}" == "a1" ]
 	then
 
-		if [ "a${APPSTORE_UPLOAD_NEEDED}" == "a1" ]; then
-			/usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER}" "$PlistInfo"
-			echo "[INFO] CFBundleVersion <${BUILD_NUMBER}> was changed in $PlistInfo"
-		else
-			/usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER}.${SVN_REVISION}" "$PlistInfo"
-			echo "[INFO] CFBundleVersion <${BUILD_NUMBER}.${SVN_REVISION}> was changed in $PlistInfo"
-		fi	
+		if [ -z "$BUNDLEVERSION" ]
+	        then
+	        	if [ "a${APPSTORE_UPLOAD_NEEDED}" == "a1" ]; then
+	                	BUNDLEVERSION="${BUILD_NUMBER}"
+	                else
+	                	BUNDLEVERSION="${BUILD_NUMBER}.${SVN_REVISION}"
+	                fi
+	        fi
+	        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUNDLEVERSION}" "$PlistInfo"
+	        echo "[INFO] CFBundleVersion <${BUNDLEVERSION}> was changed in $PlistInfo"
+	                                                                                                                                                                                                        
 	fi
 	
 	if [ -n "$BUNDLEIDENTIFIER" ]
@@ -240,6 +259,7 @@ if [ "${USER}" == "$CI_USER" ]; then
   echo "[INTEGRATOR] Unlocking iPhone keychain"
   security list-keychains -s "/Users/${CI_USER}/Library/Keychains/${KEYCHAIN_NAME}.keychain"
   security unlock-keychain -p "$KEYCHAIN_PASS" "/Users/${CI_USER}/Library/Keychains/${KEYCHAIN_NAME}.keychain"
+  security set-keychain-settings -lut 1800 "/Users/${CI_USER}/Library/Keychains/${KEYCHAIN_NAME}.keychain"
 fi
 
 
@@ -315,14 +335,20 @@ then
 fi
 
 XCWORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -print -quit)
+XCARCHIVE_LOCATION=`find . -maxdepth 2 -name "cintegration" -print -quit`/output/${PROJECT_NAME}.xcarchive
+
+if [ "a${EXTENSIONS}" != "a1" ]
+then
+	ADDITIONAL_BUILD_PARAMS="PROVISIONING_PROFILE=${PROFILE_UID} ${ADDITIONAL_BUILD_PARAMS}"
+fi
 
 if [ -n "$XCWORKSPACE" ]
 then
-        echo [BUILD] Running xcodebuild -sdk ${IPHONE_SDK} -workspace ${XCWORKSPACE} -configuration ${CONFIGURATION} build CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" PROVISIONING_PROFILE="${PROFILE_UID}"
-        xcodebuild ONLY_ACTIVE_ARCH=NO -verbose -workspace ${XCWORKSPACE} -scheme ${SCHEME_NAME} -sdk ${IPHONE_SDK} -configuration ${CONFIGURATION} build CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" PROVISIONING_PROFILE="${PROFILE_UID}" > cintegration/output/build.log 2>&1
+    	echo [BUILD] Running xcodebuild -sdk ${IPHONE_SDK} -workspace ${XCWORKSPACE} -scheme ${SCHEME_NAME} -configuration ${CONFIGURATION} archive CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" XCARCHIVE_LOCATION="${XCARCHIVE_LOCATION}" ${ADDITIONAL_BUILD_PARAMS}
+    	xcodebuild ONLY_ACTIVE_ARCH=NO -verbose -workspace ${XCWORKSPACE} -scheme ${SCHEME_NAME} -sdk ${IPHONE_SDK} -configuration ${CONFIGURATION} -archivePath ${XCARCHIVE_LOCATION} archive CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" ${ADDITIONAL_BUILD_PARAMS} > cintegration/output/build.log 2>&1 
 else
-	echo [BUILD] Running xcodebuild -sdk ${IPHONE_SDK} -configuration ${CONFIGURATION} ${TARGET_PARAMS} build CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" PROVISIONING_PROFILE="${PROFILE_UID}"
-	xcodebuild ONLY_ACTIVE_ARCH=NO -verbose -scheme ${SCHEME_NAME} -sdk ${IPHONE_SDK} -configuration ${CONFIGURATION} ${TARGET_PARAMS} build CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" PROVISIONING_PROFILE="${PROFILE_UID}" > cintegration/output/build.log 2>&1
+	echo [BUILD] Running xcodebuild -sdk ${IPHONE_SDK} -configuration ${CONFIGURATION} archive CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" XCARCHIVE_LOCATION="${XCARCHIVE_LOCATION}" ${ADDITIONAL_BUILD_PARAMS}
+        xcodebuild ONLY_ACTIVE_ARCH=NO -verbose -scheme ${SCHEME_NAME} -sdk ${IPHONE_SDK} -configuration ${CONFIGURATION} -archivePath ${XCARCHIVE_LOCATION} archive CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" ${ADDITIONAL_BUILD_PARAMS} > cintegration/output/build.log 2>&1
 fi
 
 if [ "$?" -ne "0" ]; then

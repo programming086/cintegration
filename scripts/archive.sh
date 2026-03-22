@@ -160,6 +160,12 @@ then
   load_provision 'prov'
 fi
 
+
+if [ "a$FORCE_PROVISION_FETCH" == "atrue" ]
+then
+  echo "[INFO] force fetch ${PROFILE_NAME}"
+  load_provision 'prov'
+fi
   
 PROFILE_UID=`grep -E "[[:alnum:]]+-[[:alnum:]]+-[[:alnum:]]+-[[:alnum:]]+-[[:alnum:]]+" -ao "${PROFILE_LOCATION}"`
 
@@ -200,6 +206,14 @@ then
 fi       
 done
 
+IconDir=''
+IconDir=$(find . -iname 'appicon.appiconset')
+if [ -n "$IconDir" ]
+then
+        ICONS=$(ls $IconDir/*.png)
+fi
+        
+
 if [ -n "$PlistInfo" ]
 then
 	if [ "a${BUNDLE_VERSION_CHANGE}" == "a1" ]
@@ -225,7 +239,6 @@ then
 	fi
 	        
 	
-	ICONS=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles" "$PlistInfo" | egrep -v '{|}' | sed 's/\ //g')
 else
 	echo "[WARNING] $SCHEME_NAME-Info.plist was not found"		
 fi
@@ -262,7 +275,6 @@ if [ "${USER}" == "$CI_USER" ]; then
   security set-keychain-settings -lut 1800 "/Users/${CI_USER}/Library/Keychains/${KEYCHAIN_NAME}.keychain"
 fi
 
-
 #get icons
 CHECK_FOR_CLIENT_BUILD=$(echo "$1" | grep -i "client")
 if [ -n "$ICONS" ]
@@ -271,17 +283,11 @@ then
   ICONS_SIZE_ARR=''
   while read line
   do
-  	ICON=''
-  	ICON=$(find . -name "$line*" | head -n 1) 	
-  	if [ -n "$ICON" ]
-  	then
-
-           SIZE_ICONS=''
-           SIZE_ICONS=$(/usr/bin/stat -f "%z %N" "$ICON" 2> /dev/null)
-           ICONS_SIZE_ARR=$(printf "%s\n%s" "$ICONS_SIZE_ARR" "$SIZE_ICONS")
-           ICONS_ARR=$(printf "%s\n%s" "$ICONS_ARR" "$ICON")
-  	fi
-
+ 	ICON=$line
+        SIZE_ICONS=''
+        SIZE_ICONS=$(/usr/bin/stat -f "%z %N" "$ICON" 2> /dev/null)
+        ICONS_SIZE_ARR=$(printf "%s\n%s" "$ICONS_SIZE_ARR" "$SIZE_ICONS")
+        ICONS_ARR=$(printf "%s\n%s" "$ICONS_ARR" "$ICON")
   done <<< "$ICONS"
 
   CHECK_FOR_CLIENT_BUILD=$(echo "$1" | grep -i "client")
@@ -339,16 +345,16 @@ XCARCHIVE_LOCATION=`find . -maxdepth 2 -name "cintegration" -print -quit`/output
 
 if [ "a${EXTENSIONS}" != "a1" ]
 then
-	ADDITIONAL_BUILD_PARAMS="PROVISIONING_PROFILE=${PROFILE_UID} ${ADDITIONAL_BUILD_PARAMS}"
+  ADDITIONAL_BUILD_PARAMS="APP_PROFILE=${PROFILE_UID} ${ADDITIONAL_BUILD_PARAMS}"
 fi
 
 if [ -n "$XCWORKSPACE" ]
 then
     	echo [BUILD] Running xcodebuild -sdk ${IPHONE_SDK} -workspace ${XCWORKSPACE} -scheme ${SCHEME_NAME} -configuration ${CONFIGURATION} archive CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" XCARCHIVE_LOCATION="${XCARCHIVE_LOCATION}" ${ADDITIONAL_BUILD_PARAMS}
-    	xcodebuild ONLY_ACTIVE_ARCH=NO -verbose -workspace ${XCWORKSPACE} -scheme ${SCHEME_NAME} -sdk ${IPHONE_SDK} -configuration ${CONFIGURATION} -archivePath ${XCARCHIVE_LOCATION} archive CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" ${ADDITIONAL_BUILD_PARAMS} > cintegration/output/build.log 2>&1 
+    	xcodebuild ONLY_ACTIVE_ARCH=NO -verbose -workspace ${XCWORKSPACE} -scheme "${SCHEME_NAME}" -sdk ${IPHONE_SDK} -configuration ${CONFIGURATION} -archivePath ${XCARCHIVE_LOCATION} archive CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" ${ADDITIONAL_BUILD_PARAMS} > cintegration/output/build.log 2>&1 
 else
 	echo [BUILD] Running xcodebuild -sdk ${IPHONE_SDK} -configuration ${CONFIGURATION} archive CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" XCARCHIVE_LOCATION="${XCARCHIVE_LOCATION}" ${ADDITIONAL_BUILD_PARAMS}
-        xcodebuild ONLY_ACTIVE_ARCH=NO -verbose -scheme ${SCHEME_NAME} -sdk ${IPHONE_SDK} -configuration ${CONFIGURATION} -archivePath ${XCARCHIVE_LOCATION} archive CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" ${ADDITIONAL_BUILD_PARAMS} > cintegration/output/build.log 2>&1
+        xcodebuild ONLY_ACTIVE_ARCH=NO -verbose -scheme "${SCHEME_NAME}" -sdk ${IPHONE_SDK} -configuration ${CONFIGURATION} -archivePath ${XCARCHIVE_LOCATION} archive CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" ${ADDITIONAL_BUILD_PARAMS} > cintegration/output/build.log 2>&1
 fi
 
 if [ "$?" -ne "0" ]; then

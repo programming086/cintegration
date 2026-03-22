@@ -49,6 +49,10 @@ $ git submodule add  https://github.com/stanfy/cintegration.git ios-project/cint
 - Open **Keychain access** and add a corresponding certificate with a private key for app signing
 - Create a folder **$HOME/keys** and put there mobileprovision. For example: create **/User/jenkins/keys** and put there **dev.mobileprovision**
 - Create and edit minimal **base.cfg**
+- If you want to use icon modification then install:
+```bash
+brew install ghostscript imagemagick
+```
 
 ```bash
 #!/bin/sh
@@ -331,6 +335,7 @@ TESTFLIGHT_UPLOAD_NEEDED=0 # Set 1 to upload
 API_TOKEN=''
 TEAM_TOKEN=''
 DIST_LIST=''
+TESTFLIGHT_CI_MESSAGE='Message for build you want to see in Testflight' # "Build uploaded automatically from Jenkins." by default if empty
 
 # Upload to CRITTERCISM 
 CRITTERCISM_UPLOAD_NEEDED=0  # Set 1 to upload
@@ -340,6 +345,7 @@ API_KEY=''
 # Upload to HOCKEYAPP
 HOCKEYAPP_UPLOAD_NEEDED=0  # Set 1 to upload
 API_TOKEN_HOCKEYAPP=''
+HOCKEYAPP_CI_MESSAGE='Message for build you want to see in HockeyApp Release Notes' # "Build uploaded automatically from Jenkins." by default if empty
 
 # Upload to AMAZON S3
 S3_UPLOAD_NEEDED=0  # Set 1 to upload
